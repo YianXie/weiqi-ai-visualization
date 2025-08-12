@@ -1,9 +1,11 @@
 from sgfmill import sgf
-from sgfmill.boards import Board
+from katago import KataGo
+from game_board import GameBoard
 import pygame
+import pprint
 
 # Open the SGF file and read the game data
-with open("data/2.sgf", "rb") as f:
+with open("data/sgf/1.sgf", "rb") as f:
     game = sgf.Sgf_game.from_bytes(f.read())
 
 # Get the winner, board size, and players
@@ -12,97 +14,44 @@ board_size = game.get_size()
 root_node = game.get_root()
 b_player = root_node.get("PB")
 w_player = root_node.get("PW")
-moves = [node.get_move() for node in game.get_main_sequence()]
+all_moves = [node.get_move() for node in game.get_main_sequence()]
+current_moves = []
+current_moves_katago_format = []
 
-board = Board(board_size)
-
-# Constants for the Pygame display
-SCREEN_SIZE = 800
-STONE_SIZE = SCREEN_SIZE // board_size
-MARGIN = STONE_SIZE // 2
-BOARD_COLOR = (222, 184, 135)  # Wood color
-DOT_COLOR = (28, 28, 28)  # Dark color for the 3-3 points
-
-pygame.init()
-screen = pygame.display.set_mode((SCREEN_SIZE, SCREEN_SIZE))
-
-
-def draw_board():
-    screen.fill(BOARD_COLOR)
-    for i in range(board_size):
-        # Horizontal lines
-        pygame.draw.line(
-            screen,
-            (0, 0, 0),
-            (MARGIN, MARGIN + i * STONE_SIZE),
-            (MARGIN + (board_size - 1) * STONE_SIZE, MARGIN + i * STONE_SIZE),
-        )
-        # Vertical lines
-        pygame.draw.line(
-            screen,
-            (0, 0, 0),
-            (MARGIN + i * STONE_SIZE, MARGIN),
-            (MARGIN + i * STONE_SIZE, MARGIN + (board_size - 1) * STONE_SIZE),
-        )
-        if board_size == 19 and i in [4 - 1, 10 - 1, 16 - 1]:
-            for x in range(3):  # 3 dots per row/col
-                # Horizontal dots
-                pygame.draw.circle(
-                    screen,
-                    DOT_COLOR,
-                    (
-                        MARGIN + STONE_SIZE * i + (x * 6 * STONE_SIZE),
-                        MARGIN + STONE_SIZE * i,
-                    ),
-                    STONE_SIZE // 5,
-                )
-                # Vertical dots
-                pygame.draw.circle(
-                    screen,
-                    DOT_COLOR,
-                    (
-                        MARGIN + STONE_SIZE * i,
-                        MARGIN + STONE_SIZE * i + (x * 6 * STONE_SIZE),
-                    ),
-                    STONE_SIZE // 5,
-                )
-
-
-def draw_stones():
-    for x in range(board_size):
-        for y in range(board_size):
-            color = board.get(x, y)
-            if color:
-                pygame.draw.circle(
-                    screen,
-                    (0, 0, 0) if color == "b" else (255, 255, 255),
-                    (
-                        MARGIN + x * STONE_SIZE,
-                        MARGIN + y * STONE_SIZE,
-                    ),
-                    STONE_SIZE // 2 - 3,
-                )
-
-
-running = True
 move_index = 0
-clock = pygame.time.Clock()
-while running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-        elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-            if move_index < len(game.get_main_sequence()):
-                color, move = moves[move_index]
-                if move:
-                    x, y = move
-                    board.play(x, y, color)
-                move_index += 1
 
-    draw_board()
-    draw_stones()
+katago = KataGo()
+katago.start()
 
-    pygame.display.flip()
-    clock.tick(30)
 
-pygame.quit()
+def handle_keydown(event):
+    global move_index, current_moves
+    if event.key == pygame.K_SPACE:
+        if move_index < len(all_moves):
+            move = all_moves[move_index]
+            if move.count(None) == 0:
+                game_board.add_stone(move[0], move[1][0], move[1][1])
+                current_moves.append(move)
+                current_moves_katago_format.append(
+                    [move[0], f"{chr(move[1][0] + 97)}{move[1][1]}"]
+                )
+                request = {
+                    "id": f"analysis_request_{move_index}",
+                    "moves": current_moves_katago_format,
+                    "rules": "japanese",
+                    "komi": 6.5,
+                    "boardXSize": 19,
+                    "boardYSize": 19,
+                    "maxVisits": 100,
+                    "analyzeTurns": [
+                        move_index,
+                    ],
+                }
+                response = katago.send_request(request)
+                pprint.pprint(response, indent=2)
+            move_index += 1
+
+
+game_board = GameBoard(board_size)
+game_board.add_event_listener(pygame.KEYDOWN, handle_keydown)
+game_board.run()
