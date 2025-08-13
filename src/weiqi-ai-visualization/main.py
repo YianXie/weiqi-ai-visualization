@@ -1,11 +1,12 @@
 from sgfmill import sgf
 from katago import KataGo
 from game_board import GameBoard
+from utils.coordinate_helper import CoordinateHelper
 import pygame
 import pprint
 
 # Open the SGF file and read the game data
-with open("data/sgf/1.sgf", "rb") as f:
+with open("data/sgf/2.sgf", "rb") as f:
     game = sgf.Sgf_game.from_bytes(f.read())
 
 # Get the winner, board size, and players
@@ -23,6 +24,8 @@ move_index = 0
 katago = KataGo()
 katago.start()
 
+coordinate_helper = CoordinateHelper()
+
 
 def handle_keydown(event):
     global move_index, current_moves
@@ -30,11 +33,15 @@ def handle_keydown(event):
         if move_index < len(all_moves):
             move = all_moves[move_index]
             if move.count(None) == 0:
-                game_board.add_stone(move[0], move[1][0], move[1][1])
+                color = move[0]
+                row, col = move[1]
+                print(f"Adding move: {color} at {row}, {col}")
+                game_board.add_stone(color, row, col)
                 current_moves.append(move)
                 current_moves_katago_format.append(
-                    [move[0], f"{chr(move[1][0] + 97)}{move[1][1]}"]
+                    [color, coordinate_helper.convert_to_gtp(col, row)]
                 )
+                print(current_moves_katago_format)
                 request = {
                     "id": f"analysis_request_{move_index}",
                     "moves": current_moves_katago_format,
@@ -48,7 +55,13 @@ def handle_keydown(event):
                     ],
                 }
                 response = katago.send_request(request)
-                pprint.pprint(response, indent=2)
+
+                best_move = response["moveInfos"][0]["move"]
+                if best_move:
+                    print(f"Best move for {move_index}: {best_move}")
+                    game_board.set_recommended_move(best_move)
+            else:
+                print(f"Invalid move at index {move_index}: {move}")
             move_index += 1
 
 
